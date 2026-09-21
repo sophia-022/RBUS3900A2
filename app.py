@@ -14,7 +14,7 @@ import streamlit as st
 # Configuration
 # ------------------------------------------------------------
 STARTING_CREDITS = 10_000.0
-TRADING_SECONDS = 3 * 60
+TRADING_SECONDS = 3 * 60 + 30
 TICK_SECONDS = 5
 DB_PATH = os.getenv("TRADING_DB_PATH", "trading_simulation.db")
 
@@ -233,33 +233,61 @@ initialise()
 init_db()
 
 # ------------------------------------------------------------
-# Styling
+# Styling: keep the interface light regardless of system preference.
 # ------------------------------------------------------------
-if st.session_state.condition == "Gamified":
-    st.markdown("""
-    <style>
-    .stApp {background: linear-gradient(135deg,#fff7fb 0%,#f5f0ff 50%,#eefcff 100%);}
-    .hero {padding: 18px 24px; border-radius: 18px; background: linear-gradient(90deg,#ff5fa2,#7c5cff);
-        color:#111111; margin-bottom:18px; animation: hero-pulse 2.4s ease-in-out infinite;}
-    .hero h1, .hero h2, .hero p, .badge {color:#111111 !important;}
-    .badge {display:inline-block; padding:6px 12px; border-radius:999px; background:#ffffffaa; font-weight:700;
-        animation: badge-pulse 1.2s ease-in-out infinite;}
-    .live-dot {display:inline-block; width:10px; height:10px; margin-right:6px; border-radius:50%;
-           background:#111111; animation: live-pulse 1s ease-in-out infinite;}
-    @keyframes hero-pulse {0%, 100% {transform:translateY(0);} 50% {transform:translateY(-3px);}}
-    @keyframes badge-pulse {0%, 100% {opacity:1;} 50% {opacity:.62;}}
-    @keyframes live-pulse {0%, 100% {transform:scale(1); opacity:1;} 50% {transform:scale(1.55); opacity:.45;}}
-    </style>
-    """, unsafe_allow_html=True)
-else:
-    st.markdown("""
-    <style>
-    .stApp {background:#f6f7f9; color:#111111;}
-    .hero {padding: 18px 24px; border-radius: 10px; background:#e4e7eb; color:#111111; margin-bottom:18px;}
-    .hero h1, .hero h2, .hero p, .badge {color:#111111 !important;}
-    .badge {display:inline-block; padding:6px 12px; border-radius:999px; background:#ffffff; font-weight:500;}
-    </style>
-    """, unsafe_allow_html=True)
+st.markdown("""
+<style>
+:root {color-scheme: light !important;}
+html, body, [data-testid="stAppViewContainer"], [data-testid="stHeader"] {
+    background:#f6f7f9 !important;
+    color:#111111 !important;
+}
+[data-testid="stAppViewContainer"] *, [data-testid="stSidebar"] * {
+    color:#111111;
+}
+[data-testid="stWidgetLabel"] p, [data-testid="stMarkdownContainer"] p,
+[data-testid="stMarkdownContainer"] h1, [data-testid="stMarkdownContainer"] h2,
+[data-testid="stMarkdownContainer"] h3, [data-testid="stMarkdownContainer"] h4,
+[data-testid="stCaptionContainer"] {
+    color:#111111 !important;
+}
+input, textarea, [data-baseweb="select"] > div, [data-baseweb="base-input"] {
+    background:#ffffff !important;
+    color:#111111 !important;
+}
+[data-testid="stDataFrame"] {
+    background:#ffffff !important;
+}
+.hero {padding:18px 24px; border-radius:18px; background:linear-gradient(90deg,#ff9bc5,#b7a8ff);
+    color:#111111; margin-bottom:18px; animation:hero-pulse 2.4s ease-in-out infinite;}
+.hero h1, .hero h2, .hero p, .badge {color:#111111 !important;}
+.badge {display:inline-block; padding:6px 12px; border-radius:999px; background:#ffffffaa; font-weight:700;
+    animation:badge-pulse 1.2s ease-in-out infinite;}
+.live-dot {display:inline-block; width:10px; height:10px; margin-right:6px; border-radius:50%;
+    background:#111111; animation:live-pulse 1s ease-in-out infinite;}
+.celebration-overlay {position:fixed; z-index:9999; inset:0; display:flex; align-items:center;
+    justify-content:center; overflow:hidden; background:rgba(255,255,255,.94); animation:overlay-in .35s ease-out;}
+.celebration-card {position:relative; z-index:2; width:min(760px,86vw); padding:58px 42px; border:8px solid #ff5fa2;
+    border-radius:32px; background:linear-gradient(135deg,#fff7fb,#fff4a8 48%,#c8f7ff); text-align:center;
+    box-shadow:0 20px 80px rgba(124,92,255,.35); animation:card-pop .55s cubic-bezier(.17,.84,.35,1.4);}
+.celebration-card h1 {margin:0 0 18px; color:#111111 !important; font-size:clamp(2.4rem,7vw,5.5rem); line-height:1;}
+.celebration-card p {margin:0; color:#111111 !important; font-size:clamp(1.2rem,3vw,2rem); font-weight:700;}
+.confetti {position:absolute; inset:0; pointer-events:none;}
+.confetti span {position:absolute; top:-12vh; width:16px; height:34px; animation:confetti-fall 2.8s linear infinite;}
+.confetti span:nth-child(1) {left:8%; background:#ff5fa2; transform:rotate(18deg);}
+.confetti span:nth-child(2) {left:21%; background:#7c5cff; animation-delay:.35s; transform:rotate(72deg);}
+.confetti span:nth-child(3) {left:35%; background:#00a896; animation-delay:.8s; transform:rotate(42deg);}
+.confetti span:nth-child(4) {left:53%; background:#ffb703; animation-delay:.15s; transform:rotate(88deg);}
+.confetti span:nth-child(5) {left:68%; background:#fb5607; animation-delay:.6s; transform:rotate(28deg);}
+.confetti span:nth-child(6) {left:84%; background:#3a86ff; animation-delay:1s; transform:rotate(64deg);}
+@keyframes overlay-in {from {opacity:0;} to {opacity:1;}}
+@keyframes card-pop {from {transform:scale(.55) rotate(-4deg); opacity:0;} to {transform:scale(1) rotate(0); opacity:1;}}
+@keyframes confetti-fall {0% {top:-12vh; opacity:1;} 100% {top:112vh; opacity:.2; transform:translateX(80px) rotate(520deg);}}
+@keyframes hero-pulse {0%, 100% {transform:translateY(0);} 50% {transform:translateY(-3px);}}
+@keyframes badge-pulse {0%, 100% {opacity:1;} 50% {opacity:.62;}}
+@keyframes live-pulse {0%, 100% {transform:scale(1); opacity:1;} 50% {transform:scale(1.55); opacity:.45;}}
+</style>
+""", unsafe_allow_html=True)
 
 # ------------------------------------------------------------
 # Questionnaire
@@ -274,8 +302,7 @@ if st.session_state.page == "questionnaire":
     """, unsafe_allow_html=True)
 
     st.info(
-        "Your starting credits are simulated only and have no monetary value. "
-        "Your platform assignment is random."
+        "Your starting credits are simulated only and have no monetary value."
     )
 
     with st.form("participant_form"):
@@ -325,6 +352,17 @@ elif st.session_state.page == "trading":
         finish_participant()
         st.rerun()
 
+        if st.session_state.get("celebration_until", 0) > time.monotonic():
+                st.markdown("""
+                <div class="celebration-overlay">
+                    <div class="confetti"><span></span><span></span><span></span><span></span><span></span><span></span></div>
+                    <div class="celebration-card">
+                        <h1>Fantastic trade!</h1>
+                        <p>Your decision is now recorded. Keep exploring the market.</p>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
     current_total_value = total_value(st.session_state)
     st.session_state.performance_history.append({
         "Elapsed minutes": round(elapsed / 60, 2),
@@ -354,7 +392,7 @@ elif st.session_state.page == "trading":
     mins, secs = divmod(int(remaining), 60)
     st.markdown(f"""
     <div class="hero">
-            <span class="badge">{'<span class="live-dot"></span>🎮 GAMIFIED MODE' if st.session_state.condition == 'Gamified' else 'STANDARD MODE'}</span>
+        <span class="badge"><span class="live-dot"></span>LIVE MARKET</span>
       <h1>Trading Simulation</h1>
       <h2>Time remaining: {mins:02d}:{secs:02d}</h2>
     </div>
@@ -366,7 +404,7 @@ elif st.session_state.page == "trading":
     c3.metric("Total value", f"${total_value(st.session_state):,.0f}")
     c4.metric("Trades", st.session_state.trade_count)
 
-    st.caption("You may buy and sell whole units. Prices update every five seconds. The market path is independent of your platform condition.")
+    st.caption("You may buy and sell whole units. Prices update every five seconds.")
 
     st.subheader("Investment performance")
     performance = pd.DataFrame(st.session_state.performance_history).drop_duplicates(
@@ -448,7 +486,7 @@ elif st.session_state.page == "trading":
 
             if st.session_state.condition == "Gamified":
                 st.balloons()
-                st.success("✨ Trade executed! Keep going.")
+                st.session_state.celebration_until = time.monotonic() + 4
             else:
                 st.success("Trade executed.")
 
@@ -513,7 +551,6 @@ elif st.session_state.page == "results":
 
     summary = pd.DataFrame([{
         "Participant ID": st.session_state.participant_id,
-        "Condition": st.session_state.condition,
         "Trades": st.session_state.trade_count,
         "Turnover": turnover(st.session_state),
         "Final total value": tv,
