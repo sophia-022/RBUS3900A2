@@ -315,15 +315,21 @@ input, textarea, [data-baseweb="select"] > div, [data-baseweb="base-input"] {
 .live-dot {display:inline-block; width:10px; height:10px; margin-right:6px; border-radius:50%;
     background:#111111; animation:live-pulse 1s ease-in-out infinite;}
 .celebration-overlay {position:fixed; z-index:9999; inset:0; display:flex; align-items:center;
-    justify-content:center; overflow:hidden; background:rgba(255,255,255,.82); animation:overlay-in .2s ease-out;}
-.celebration-card {position:relative; z-index:2; width:min(520px,82vw); padding:28px 24px; border:5px solid #ff5fa2;
-    border-radius:24px; background:linear-gradient(135deg,#fff7fb,#fff4a8 48%,#c8f7ff); text-align:center;
-    box-shadow:0 14px 48px rgba(124,92,255,.28); animation:card-pop .3s cubic-bezier(.17,.84,.35,1.2);}
-.celebration-card h1 {margin:0 0 8px; color:#111111 !important; font-size:clamp(1.8rem,5vw,3.2rem); line-height:1;}
-.celebration-card p {margin:0; color:#111111 !important; font-size:clamp(1rem,2.5vw,1.35rem); font-weight:700;}
-.reward-effect {height:74px; display:flex; align-items:center; justify-content:center; margin-bottom:6px;}
-.reward-star {color:#ffb703; font-size:5rem; line-height:1; animation:star-pop .8s ease-in-out infinite alternate;}
-.reward-balloons {font-size:3.2rem; letter-spacing:12px; animation:balloon-bob .7s ease-in-out infinite alternate;}
+    justify-content:center; overflow:hidden; background:rgba(61,179,92,.2); animation:overlay-in .2s ease-out;}
+.celebration-content {position:relative; z-index:2; text-align:center; animation:content-pop .3s ease-out;}
+.celebration-content h1 {margin:0 0 8px; color:#075b2a !important; font-size:clamp(2rem,6vw,4.2rem); line-height:1;}
+.celebration-content p {margin:0; color:#075b2a !important; font-size:clamp(1rem,2.5vw,1.35rem); font-weight:700;}
+.reward-effect {height:104px; display:flex; align-items:center; justify-content:center; margin-bottom:8px;}
+.reward-star {position:relative; width:82px; height:82px; background:#ffd43b; clip-path:polygon(50% 0%,61% 35%,98% 35%,68% 56%,79% 92%,50% 70%,21% 92%,32% 56%,2% 35%,39% 35%);
+    filter:drop-shadow(0 5px 10px rgba(145,94,0,.35)); animation:star-pop .55s ease-in-out infinite alternate;}
+.reward-star::after {content:""; position:absolute; inset:18px; background:#fff3a3; clip-path:inherit;}
+.reward-balloons {gap:22px; align-items:flex-start; padding-top:8px;}
+.balloon {position:relative; width:40px; height:52px; border-radius:50% 50% 46% 46%; animation:balloon-bob .7s ease-in-out infinite alternate;}
+.balloon::before {content:""; position:absolute; left:15px; bottom:-43px; width:1px; height:44px; background:#075b2a;}
+.balloon::after {content:""; position:absolute; left:16px; bottom:-3px; width:9px; height:9px; background:inherit; clip-path:polygon(0 0,100% 0,50% 100%);}
+.balloon:nth-child(1) {background:#ff5f8f;}
+.balloon:nth-child(2) {background:#ffd43b; animation-delay:.15s;}
+.balloon:nth-child(3) {background:#4dabf7; animation-delay:.3s;}
 .confetti {position:absolute; inset:0; pointer-events:none;}
 .confetti span {position:absolute; top:-12vh; width:12px; height:26px; animation:confetti-fall 1.5s linear infinite;}
 .confetti span:nth-child(1) {left:8%; background:#ff5fa2; transform:rotate(18deg);}
@@ -333,7 +339,7 @@ input, textarea, [data-baseweb="select"] > div, [data-baseweb="base-input"] {
 .confetti span:nth-child(5) {left:68%; background:#fb5607; animation-delay:.6s; transform:rotate(28deg);}
 .confetti span:nth-child(6) {left:84%; background:#3a86ff; animation-delay:1s; transform:rotate(64deg);}
 @keyframes overlay-in {from {opacity:0;} to {opacity:1;}}
-@keyframes card-pop {from {transform:scale(.55) rotate(-4deg); opacity:0;} to {transform:scale(1) rotate(0); opacity:1;}}
+@keyframes content-pop {from {transform:scale(.75); opacity:0;} to {transform:scale(1); opacity:1;}}
 @keyframes confetti-fall {0% {top:-12vh; opacity:1;} 100% {top:112vh; opacity:.2; transform:translateX(80px) rotate(520deg);}}
 @keyframes star-pop {from {transform:scale(.8) rotate(-8deg);} to {transform:scale(1.08) rotate(8deg);}}
 @keyframes balloon-bob {from {transform:translateY(4px);} to {transform:translateY(-8px);}}
@@ -416,14 +422,14 @@ elif st.session_state.page == "trading":
     if st.session_state.get("celebration_until", 0) > time.monotonic():
         reward_variant = st.session_state.get("reward_variant", "star")
         reward_content = {
-            "balloons": '<div class="reward-effect reward-balloons">🎈 🎈 🎈</div>',
-            "star": '<div class="reward-effect reward-star">★</div>',
+            "balloons": '<div class="reward-effect reward-balloons"><span class="balloon"></span><span class="balloon"></span><span class="balloon"></span></div>',
+            "star": '<div class="reward-effect reward-star"></div>',
             "confetti": '<div class="reward-effect"><div class="confetti"><span></span><span></span><span></span><span></span><span></span><span></span></div></div>',
         }[reward_variant]
         reward_message = st.session_state.get("reward_message", "Trade recorded!")
         st.markdown(f"""
         <div class="celebration-overlay">
-            <div class="celebration-card">
+            <div class="celebration-content">
                 {reward_content}
                 <h1>{reward_message}</h1>
                 <p>Trade recorded.</p>
