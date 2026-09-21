@@ -14,7 +14,7 @@ import streamlit as st
 # Configuration
 # ------------------------------------------------------------
 STARTING_CREDITS = 10_000.0
-TRADING_SECONDS = 5 * 60
+TRADING_SECONDS = 3 * 60
 TICK_SECONDS = 5
 DB_PATH = os.getenv("TRADING_DB_PATH", "trading_simulation.db")
 
@@ -226,6 +226,7 @@ def initialise():
         st.session_state.trade_count = 0
         st.session_state.started_at = None
         st.session_state.start_monotonic = None
+        st.session_state.performance_history = []
         st.session_state.finished = False
 
 initialise()
@@ -239,16 +240,24 @@ if st.session_state.condition == "Gamified":
     <style>
     .stApp {background: linear-gradient(135deg,#fff7fb 0%,#f5f0ff 50%,#eefcff 100%);}
     .hero {padding: 18px 24px; border-radius: 18px; background: linear-gradient(90deg,#ff5fa2,#7c5cff);
-            color:white; margin-bottom:18px;}
-    .badge {display:inline-block; padding:6px 12px; border-radius:999px; background:#ffffff55; font-weight:700;}
+        color:#111111; margin-bottom:18px; animation: hero-pulse 2.4s ease-in-out infinite;}
+    .hero h1, .hero h2, .hero p, .badge {color:#111111 !important;}
+    .badge {display:inline-block; padding:6px 12px; border-radius:999px; background:#ffffffaa; font-weight:700;
+        animation: badge-pulse 1.2s ease-in-out infinite;}
+    .live-dot {display:inline-block; width:10px; height:10px; margin-right:6px; border-radius:50%;
+           background:#111111; animation: live-pulse 1s ease-in-out infinite;}
+    @keyframes hero-pulse {0%, 100% {transform:translateY(0);} 50% {transform:translateY(-3px);}}
+    @keyframes badge-pulse {0%, 100% {opacity:1;} 50% {opacity:.62;}}
+    @keyframes live-pulse {0%, 100% {transform:scale(1); opacity:1;} 50% {transform:scale(1.55); opacity:.45;}}
     </style>
     """, unsafe_allow_html=True)
 else:
     st.markdown("""
     <style>
-    .stApp {background:#f6f7f9;}
-    .hero {padding: 18px 24px; border-radius: 10px; background:#263238; color:white; margin-bottom:18px;}
-    .badge {display:inline-block; padding:6px 12px; border-radius:999px; background:#ffffff22; font-weight:500;}
+    .stApp {background:#f6f7f9; color:#111111;}
+    .hero {padding: 18px 24px; border-radius: 10px; background:#e4e7eb; color:#111111; margin-bottom:18px;}
+    .hero h1, .hero h2, .hero p, .badge {color:#111111 !important;}
+    .badge {display:inline-block; padding:6px 12px; border-radius:999px; background:#ffffff; font-weight:500;}
     </style>
     """, unsafe_allow_html=True)
 
@@ -259,8 +268,8 @@ if st.session_state.page == "questionnaire":
     st.markdown("""
     <div class="hero">
       <h1>📈 Trading Simulation</h1>
-      <p>Thank you for participating. You will complete a short questionnaire,
-      then trade in a simulated market for five minutes.</p>
+    <p>Thank you for participating. You will complete a short questionnaire,
+    then trade in a simulated market for three minutes.</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -316,6 +325,14 @@ elif st.session_state.page == "trading":
         finish_participant()
         st.rerun()
 
+    current_total_value = total_value(st.session_state)
+    st.session_state.performance_history.append({
+        "Elapsed minutes": round(elapsed / 60, 2),
+        "Total value": current_total_value,
+        "Portfolio value": portfolio_value(st.session_state),
+        "Available credits": st.session_state.cash,
+    })
+
     # Snapshot approximately every 5 seconds.
     current_bucket = int(elapsed // TICK_SECONDS)
     if current_bucket != st.session_state.get("last_snapshot_bucket", -1):
@@ -337,7 +354,7 @@ elif st.session_state.page == "trading":
     mins, secs = divmod(int(remaining), 60)
     st.markdown(f"""
     <div class="hero">
-      <span class="badge">{'🎮 GAMIFIED MODE' if st.session_state.condition == 'Gamified' else 'STANDARD MODE'}</span>
+            <span class="badge">{'<span class="live-dot"></span>🎮 GAMIFIED MODE' if st.session_state.condition == 'Gamified' else 'STANDARD MODE'}</span>
       <h1>Trading Simulation</h1>
       <h2>Time remaining: {mins:02d}:{secs:02d}</h2>
     </div>
@@ -350,6 +367,13 @@ elif st.session_state.page == "trading":
     c4.metric("Trades", st.session_state.trade_count)
 
     st.caption("You may buy and sell whole units. Prices update every five seconds. The market path is independent of your platform condition.")
+
+    st.subheader("Investment performance")
+    performance = pd.DataFrame(st.session_state.performance_history).drop_duplicates(
+        subset=["Elapsed minutes"], keep="last"
+    ).set_index("Elapsed minutes")
+    st.line_chart(performance, y=["Total value", "Portfolio value", "Available credits"],
+                  use_container_width=True)
 
     # Asset table
     rows = []
@@ -479,6 +503,14 @@ elif st.session_state.page == "results":
     c4.metric("Trades", st.session_state.trade_count)
 
     st.write("### Your recorded trading summary")
+    if st.session_state.performance_history:
+        performance = pd.DataFrame(st.session_state.performance_history).drop_duplicates(
+            subset=["Elapsed minutes"], keep="last"
+        ).set_index("Elapsed minutes")
+        st.subheader("Investment performance")
+        st.line_chart(performance, y=["Total value", "Portfolio value", "Available credits"],
+                      use_container_width=True)
+
     summary = pd.DataFrame([{
         "Participant ID": st.session_state.participant_id,
         "Condition": st.session_state.condition,
