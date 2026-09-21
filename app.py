@@ -14,8 +14,9 @@ import streamlit as st
 # Configuration
 # ------------------------------------------------------------
 STARTING_CREDITS = 10_000.0
-TRADING_SECONDS = 3 * 60 + 30
+TRADING_SECONDS = 5 * 60
 TICK_SECONDS = 5
+VOLATILITY_MULTIPLIER = 2.5
 DB_PATH = os.getenv("TRADING_DB_PATH", "trading_simulation.db")
 
 # Fixed market specification: the same instruments/volatility are used
@@ -180,7 +181,7 @@ def make_market(seed, total_seconds=TRADING_SECONDS, step=TICK_SECONDS):
     for asset, spec in ASSETS.items():
         prices = [spec["start"]]
         # Approximate continuous random walk. The condition never affects prices.
-        step_vol = spec["daily_vol"] / np.sqrt(78)  # roughly 5-min intervals in a 6.5h session
+        step_vol = (spec["daily_vol"] * VOLATILITY_MULTIPLIER) / np.sqrt(78)
         for _ in range(n - 1):
             ret = rng.normal(0, step_vol)
             prices.append(max(1.0, prices[-1] * (1 + ret)))
@@ -317,7 +318,7 @@ if st.session_state.page == "questionnaire":
     <div class="hero">
       <h1>📈 Trading Simulation</h1>
     <p>Thank you for participating. You will complete a short questionnaire,
-    then trade in a simulated market for three and a half minutes.</p>
+    then trade in a simulated market for five minutes.</p>
     </div>
     """, unsafe_allow_html=True)
 
