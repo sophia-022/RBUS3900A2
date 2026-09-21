@@ -16,7 +16,7 @@ import streamlit as st
 STARTING_CREDITS = 10_000.0
 TRADING_SECONDS = 5 * 60
 TICK_SECONDS = 5
-VOLATILITY_MULTIPLIER = 2.5
+VOLATILITY_MULTIPLIER = 5.0
 DB_PATH = os.getenv("TRADING_DB_PATH", "trading_simulation.db")
 
 # Fixed market specification: the same instruments/volatility are used
@@ -67,6 +67,18 @@ def init_db():
             starting_credits REAL
         )
     """)
+    existing_columns = {
+        row[1] for row in conn.execute("PRAGMA table_info(participants)")
+    }
+    new_columns = {
+        "trading_ability_start": "INTEGER",
+        "trading_confidence_end": "INTEGER",
+        "trading_ability_end": "INTEGER",
+        "future_trading_interest": "TEXT",
+    }
+    for column, data_type in new_columns.items():
+        if column not in existing_columns:
+            conn.execute(f"ALTER TABLE participants ADD COLUMN {column} {data_type}")
     conn.execute("""
         CREATE TABLE IF NOT EXISTS trades (
             trade_id TEXT PRIMARY KEY,
@@ -122,11 +134,28 @@ def insert_participant():
     conn.execute("""
         INSERT INTO participants
         (participant_id, name, age, investment_experience, financial_knowledge,
-         condition, market_seed, started_at, starting_credits)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         trading_ability_start, condition, market_seed, started_at, starting_credits)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         s.participant_id, s.name, s.age, s.experience, s.financial_knowledge,
-        s.condition, s.market_seed, s.started_at, STARTING_CREDITS
+        s.trading_ability_start, s.condition, s.market_seed, s.started_at,
+        STARTING_CREDITS
+    ))
+    conn.commit()
+    conn.close()
+
+def save_post_questionnaire():
+    s = st.session_state
+    conn = get_conn()
+    conn.execute("""
+        UPDATE participants
+        SET trading_confidence_end=?, trading_ability_end=?, future_trading_interest=?
+        WHERE participant_id=?
+    """, (
+        s.trading_confidence_end,
+        s.trading_ability_end,
+        s.future_trading_interest,
+        s.participant_id,
     ))
     conn.commit()
     conn.close()
@@ -236,16 +265,20 @@ def initialise():
         st.session_state.condition = None
         st.session_state.market_seed = random.randint(1, 2_000_000_000)
         st.session_state.positions = {a: 0 for a in ASSETS}
+        st.session_state.position_cost_basis = {a: 0.0 for a in ASSETS}
         st.session_state.cash = STARTING_CREDITS
         st.session_state.total_bought_value = 0.0
         st.session_state.total_sold_value = 0.0
         st.session_state.trade_count = 0
+        st.session_state.post_questionnaire_submitted = False
         st.session_state.started_at = None
         st.session_state.start_monotonic = None
         st.session_state.performance_history = []
         st.session_state.finished = False
 
 initialise()
+if "position_cost_basis" not in st.session_state:
+    st.session_state.position_cost_basis = {a: 0.0 for a in ASSETS}
 init_db()
 
 # ------------------------------------------------------------
@@ -338,6 +371,11 @@ if st.session_state.page == "questionnaire":
             min_value=1, max_value=5, value=3,
             help="1 = very low, 5 = very high"
         )
+        trading_ability = st.slider(
+            "How would you rate your trading ability?",
+            min_value=1, max_value=5, value=3,
+            help="1 = very low, 5 = very high"
+        )
         consent = st.checkbox(
             "I understand that this is a simulated trading study and agree to participate."
         )
@@ -353,6 +391,7 @@ if st.session_state.page == "questionnaire":
             st.session_state.age = int(age)
             st.session_state.experience = experience
             st.session_state.financial_knowledge = int(knowledge)
+            st.session_state.trading_ability_start = int(trading_ability)
             st.session_state.started_at = datetime.now(timezone.utc).isoformat()
             st.session_state.start_monotonic = time.monotonic()
             st.session_state.condition = assign_condition()
@@ -377,15 +416,15 @@ elif st.session_state.page == "trading":
     if st.session_state.get("celebration_until", 0) > time.monotonic():
         reward_variant = st.session_state.get("reward_variant", "star")
         reward_content = {
-            "balloons": ('<div class="reward-effect reward-balloons">🎈 🎈 🎈</div>', "Great choice!"),
-            "star": ('<div class="reward-effect reward-star">★</div>', "Brilliant move!"),
-            "confetti": ('<div class="reward-effect"><div class="confetti"><span></span><span></span><span></span><span></span><span></span><span></span></div></div>', "Nice work!"),
+            "balloons": '<div class="reward-effect reward-balloons">🎈 🎈 🎈</div>',
+            "star": '<div class="reward-effect reward-star">★</div>',
+            "confetti": '<div class="reward-effect"><div class="confetti"><span></span><span></span><span></span><span></span><span></span><span></span></div></div>',
         }[reward_variant]
-        reward_visual, reward_message = reward_content
+        reward_message = st.session_state.get("reward_message", "Trade recorded!")
         st.markdown(f"""
         <div class="celebration-overlay">
             <div class="celebration-card">
-                {reward_visual}
+                {reward_content}
                 <h1>{reward_message}</h1>
                 <p>Trade recorded.</p>
             </div>
@@ -515,10 +554,19 @@ elif st.session_state.page == "trading":
             if action == "Buy" and qty <= max_buy:
                 st.session_state.cash -= value
                 st.session_state.positions[asset] += qty
+                st.session_state.position_cost_basis[asset] += value
                 st.session_state.total_bought_value += value
             elif action == "Sell" and qty <= max_sell:
+                average_cost = (
+                    st.session_state.position_cost_basis[asset]
+                    / st.session_state.positions[asset]
+                ) if st.session_state.positions[asset] else 0.0
                 st.session_state.cash += value
                 st.session_state.positions[asset] -= qty
+                st.session_state.position_cost_basis[asset] = max(
+                    0.0,
+                    st.session_state.position_cost_basis[asset] - average_cost * qty
+                )
                 st.session_state.total_sold_value += value
             else:
                 st.error("That trade cannot be completed.")
@@ -547,9 +595,17 @@ elif st.session_state.page == "trading":
 
             if st.session_state.condition == "Gamified":
                 st.session_state.reward_variant = random.choice(["balloons", "star", "confetti"])
+                reward_messages = {
+                    "balloons": ["Great choice!", "Keep it moving!", "Up you go!", "Nice lift!"],
+                    "star": ["Brilliant move!", "Sharp thinking!", "You saw it!", "Excellent call!"],
+                    "confetti": ["Nice work!", "Trade success!", "Well played!", "Good momentum!"],
+                }
+                st.session_state.reward_message = random.choice(
+                    reward_messages[st.session_state.reward_variant]
+                )
                 if st.session_state.reward_variant == "balloons":
                     st.balloons()
-                st.session_state.celebration_until = time.monotonic() + 1.5
+                st.session_state.celebration_until = time.monotonic() + 2
             else:
                 st.success("Trade executed.")
 
@@ -561,14 +617,24 @@ elif st.session_state.page == "trading":
         for a in ASSETS:
             qty = st.session_state.positions[a]
             if qty:
+                current_value = qty * prices[a]
+                cost_basis = st.session_state.position_cost_basis[a]
+                return_pct = (
+                    (current_value - cost_basis) / cost_basis * 100
+                    if cost_basis else 0.0
+                )
                 portfolio_rows.append({
                     "Asset": a,
                     "Risk": ASSETS[a]["risk"],
                     "Units": qty,
-                    "Current value": qty * prices[a]
+                    "Current value": current_value,
+                    "Return %": return_pct
                 })
         if portfolio_rows:
-            st.dataframe(pd.DataFrame(portfolio_rows).style.format({"Current value": "${:,.2f}"}),
+            st.dataframe(pd.DataFrame(portfolio_rows).style.format({
+                "Current value": "${:,.2f}",
+                "Return %": "{:+.2f}%"
+            }),
                          use_container_width=True, hide_index=True)
         else:
             st.write("No positions yet.")
@@ -602,6 +668,37 @@ elif st.session_state.page == "results":
     c2.metric("Final value", f"${tv:,.2f}")
     c3.metric("Profit / loss", f"${profit:,.2f}")
     c4.metric("Trades", st.session_state.trade_count)
+
+    if not st.session_state.get("post_questionnaire_submitted", False):
+        st.subheader("Post-simulation questionnaire")
+        with st.form("post_trading_form"):
+            trading_confidence = st.slider(
+                "How confident are you in trading after your experience on the platform?",
+                min_value=1, max_value=5, value=3,
+                help="1 = not at all confident, 5 = extremely confident"
+            )
+            trading_ability_end = st.slider(
+                "What would you rate your trading ability out of 5?",
+                min_value=1, max_value=5, value=3
+            )
+            future_interest = st.radio(
+                "Would you be interested in trading on a platform like this in the future?",
+                ["Yes", "Maybe", "No"], horizontal=True
+            )
+            questionnaire_submitted = st.form_submit_button("Submit questionnaire", type="primary")
+
+        if questionnaire_submitted:
+            st.session_state.trading_confidence_end = int(trading_confidence)
+            st.session_state.trading_ability_end = int(trading_ability_end)
+            st.session_state.future_trading_interest = future_interest
+            save_post_questionnaire()
+            st.session_state.post_questionnaire_submitted = True
+            st.rerun()
+    else:
+        st.success("Thank you. Your questionnaire responses have been recorded.")
+
+    if not st.session_state.get("post_questionnaire_submitted", False):
+        st.stop()
 
     st.write("### Your recorded trading summary")
     if st.session_state.performance_history:
