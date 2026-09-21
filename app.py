@@ -352,16 +352,16 @@ elif st.session_state.page == "trading":
         finish_participant()
         st.rerun()
 
-        if st.session_state.get("celebration_until", 0) > time.monotonic():
-                st.markdown("""
-                <div class="celebration-overlay">
-                    <div class="confetti"><span></span><span></span><span></span><span></span><span></span><span></span></div>
-                    <div class="celebration-card">
-                        <h1>Fantastic trade!</h1>
-                        <p>Your decision is now recorded. Keep exploring the market.</p>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
+    if st.session_state.get("celebration_until", 0) > time.monotonic():
+        st.markdown("""
+        <div class="celebration-overlay">
+            <div class="confetti"><span></span><span></span><span></span><span></span><span></span><span></span></div>
+            <div class="celebration-card">
+                <h1>Fantastic trade!</h1>
+                <p>Your decision is now recorded. Keep exploring the market.</p>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
     current_total_value = total_value(st.session_state)
     st.session_state.performance_history.append({
@@ -413,17 +413,49 @@ elif st.session_state.page == "trading":
     st.line_chart(performance, y=["Total value", "Portfolio value", "Available credits"],
                   use_container_width=True)
 
+    st.subheader("Share price history")
+    history_choice = st.selectbox(
+        "Choose a share to inspect",
+        ["All shares"] + list(ASSETS.keys()),
+        key="history_choice"
+    )
+    history_minutes = np.arange(len(next(iter(st.session_state.market.values())))) * TICK_SECONDS / 60
+    if history_choice == "All shares":
+        history = pd.DataFrame({
+            asset: st.session_state.market[asset] / st.session_state.market[asset][0] * 100
+            for asset in ASSETS
+        }, index=history_minutes)
+        history.index.name = "Minutes"
+        st.caption("All shares are indexed to 100 at the start so their performance can be compared fairly.")
+    else:
+        history = pd.DataFrame(
+            {"Price": st.session_state.market[history_choice]},
+            index=history_minutes
+        )
+        history.index.name = "Minutes"
+    st.line_chart(history, use_container_width=True)
+
     # Asset table
     rows = []
     for asset, spec in ASSETS.items():
+        current_price = prices[asset]
+        starting_price = st.session_state.market[asset][0]
+        price_change = current_price - starting_price
         rows.append({
             "Asset": asset,
             "Risk": spec["risk"],
-            "Price": prices[asset],
+            "Current price": current_price,
+            "Change": price_change,
+            "Change %": price_change / starting_price * 100,
             "Units held": st.session_state.positions[asset],
-            "Position value": st.session_state.positions[asset] * prices[asset]
+            "Position value": st.session_state.positions[asset] * current_price
         })
-    st.dataframe(pd.DataFrame(rows).style.format({"Price": "${:,.2f}", "Position value": "${:,.2f}"}),
+    st.dataframe(pd.DataFrame(rows).style.format({
+        "Current price": "${:,.2f}",
+        "Change": "${:+,.2f}",
+        "Change %": "{:+.2f}%",
+        "Position value": "${:,.2f}"
+    }),
                  use_container_width=True, hide_index=True)
 
     st.divider()
