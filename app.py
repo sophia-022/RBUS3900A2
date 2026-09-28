@@ -360,51 +360,58 @@ if st.session_state.page == "questionnaire":
     then trade in a simulated market for five minutes.</p>
     </div>
     """, unsafe_allow_html=True)
+# ============================================================
+# PAGE 1: INSTRUCTIONS
+# ============================================================
+
+if st.session_state.page == "instructions":
+
+    st.markdown(
+        """
+        <div class="hero">
+            <h1>📈 Trading Simulation</h1>
+            <p>
+                Thank you for participating in this simulated trading study.
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
     st.info(
-        "Your starting credits are simulated only and have no monetary value."
+        "The simulation uses artificial credits only. "
+        "They have no real monetary value."
+    )
+
+    st.subheader("Before you begin")
+
+    st.markdown(
+        """
+        **Rules of the simulation:**
+
+        1. You will receive **$10,000 in simulated credits**.
+        2. You may buy and sell shares using these credits.
+        3. You may trade **as many times as you wish** during the simulation.
+        4. You can only buy shares when you have sufficient simulated credits.
+        5. You can only sell shares that you currently own.
+        6. Share prices will change throughout the simulation.
+        7. The simulation will run for **8 minutes**.
+        8. You may exit the simulation at any time.
+        9. All credits and market movements are simulated and have no real monetary value.
+        10. The simulation does not represent real financial markets or actual investment outcomes.
+        """
+    )
+
+    st.warning(
+        "Please make your trading decisions independently. "
+        "There are no right or wrong decisions."
     )
 
     with st.form("participant_form"):
-        name = st.text_input("Participant name")
-        age = st.number_input("Age", min_value=18, max_value=99, step=1)
-        experience = st.selectbox(
-            "Investment experience",
-            ["None", "Less than 1 year", "1–3 years", "More than 3 years"]
-        )
-        knowledge = st.slider(
-            "How would you rate your financial knowledge?",
-            min_value=1, max_value=5, value=3,
-            help="1 = very low, 5 = very high"
-        )
-        trading_ability = st.slider(
-            "How would you rate your trading ability?",
-            min_value=1, max_value=5, value=3,
-            help="1 = very low, 5 = very high"
-        )
         consent = st.checkbox(
             "I understand that this is a simulated trading study and agree to participate."
         )
         submitted = st.form_submit_button("Start simulation", type="primary")
-
-    if submitted:
-        if not name.strip():
-            st.error("Please enter a participant name.")
-        elif not consent:
-            st.error("Please confirm the participation statement.")
-        else:
-            st.session_state.name = name.strip()
-            st.session_state.age = int(age)
-            st.session_state.experience = experience
-            st.session_state.financial_knowledge = int(knowledge)
-            st.session_state.trading_ability_start = int(trading_ability)
-            st.session_state.started_at = datetime.now(timezone.utc).isoformat()
-            st.session_state.start_monotonic = time.monotonic()
-            st.session_state.condition = assign_condition()
-            st.session_state.market = make_market(st.session_state.market_seed)
-            insert_participant()
-            st.session_state.page = "trading"
-            st.rerun()
 
 # ------------------------------------------------------------
 # Trading screen
@@ -674,37 +681,6 @@ elif st.session_state.page == "results":
     c2.metric("Final value", f"${tv:,.2f}")
     c3.metric("Profit / loss", f"${profit:,.2f}")
     c4.metric("Trades", st.session_state.trade_count)
-
-    if not st.session_state.get("post_questionnaire_submitted", False):
-        st.subheader("Post-simulation questionnaire")
-        with st.form("post_trading_form"):
-            trading_confidence = st.slider(
-                "How confident are you in trading after your experience on the platform?",
-                min_value=1, max_value=5, value=3,
-                help="1 = not at all confident, 5 = extremely confident"
-            )
-            trading_ability_end = st.slider(
-                "What would you rate your trading ability out of 5?",
-                min_value=1, max_value=5, value=3
-            )
-            future_interest = st.radio(
-                "Would you be interested in trading on a platform like this in the future?",
-                ["Yes", "Maybe", "No"], horizontal=True
-            )
-            questionnaire_submitted = st.form_submit_button("Submit questionnaire", type="primary")
-
-        if questionnaire_submitted:
-            st.session_state.trading_confidence_end = int(trading_confidence)
-            st.session_state.trading_ability_end = int(trading_ability_end)
-            st.session_state.future_trading_interest = future_interest
-            save_post_questionnaire()
-            st.session_state.post_questionnaire_submitted = True
-            st.rerun()
-    else:
-        st.success("Thank you. Your questionnaire responses have been recorded.")
-
-    if not st.session_state.get("post_questionnaire_submitted", False):
-        st.stop()
 
     st.write("### Your recorded trading summary")
     if st.session_state.performance_history:
