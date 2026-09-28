@@ -16,7 +16,7 @@ import streamlit as st
 
 STARTING_CREDITS = 10_000.0
 
-# 8 MINUTES
+# 8-minute trading period
 TRADING_SECONDS = 8 * 60
 
 # Market prices update every 5 seconds
@@ -24,7 +24,10 @@ TICK_SECONDS = 5
 
 VOLATILITY_MULTIPLIER = 5.0
 
-DB_PATH = os.getenv("TRADING_DB_PATH", "trading_simulation.db")
+DB_PATH = os.getenv(
+    "TRADING_DB_PATH",
+    "trading_simulation.db"
+)
 
 
 # ============================================================
@@ -37,32 +40,38 @@ ASSETS = {
         "daily_vol": 0.025,
         "risk": "High"
     },
+
     "Green Energy": {
         "start": 80.0,
         "daily_vol": 0.022,
         "risk": "High"
     },
+
     "Global Bank": {
         "start": 65.0,
         "daily_vol": 0.014,
         "risk": "Medium"
     },
+
     "Healthcare": {
         "start": 55.0,
         "daily_vol": 0.012,
         "risk": "Medium"
     },
+
     "Consumer": {
         "start": 45.0,
         "daily_vol": 0.010,
         "risk": "Low"
     },
+
     "Infrastructure": {
         "start": 70.0,
         "daily_vol": 0.009,
         "risk": "Low"
     },
 }
+
 
 RISK_SCORE = {
     "Low": 1,
@@ -72,14 +81,14 @@ RISK_SCORE = {
 
 
 # ============================================================
-# PAGE SETTINGS
+# PAGE CONFIGURATION
 # ============================================================
 
 st.set_page_config(
     page_title="Trading Simulation",
     page_icon="📈",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="collapsed"
 )
 
 
@@ -88,11 +97,16 @@ st.set_page_config(
 # ============================================================
 
 def get_conn():
+
     conn = sqlite3.connect(
         DB_PATH,
         check_same_thread=False
     )
-    conn.execute("PRAGMA journal_mode=WAL;")
+
+    conn.execute(
+        "PRAGMA journal_mode=WAL;"
+    )
+
     return conn
 
 
@@ -100,8 +114,12 @@ def init_db():
 
     conn = get_conn()
 
-    # Participant information
-    conn.execute("""
+    # --------------------------------------------------------
+    # PARTICIPANTS
+    # --------------------------------------------------------
+
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS participants (
             participant_id TEXT PRIMARY KEY,
             condition TEXT,
@@ -113,10 +131,15 @@ def init_db():
             final_total_value REAL,
             starting_credits REAL
         )
-    """)
+        """
+    )
 
-    # Individual trades
-    conn.execute("""
+    # --------------------------------------------------------
+    # TRADES
+    # --------------------------------------------------------
+
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS trades (
             trade_id TEXT PRIMARY KEY,
             participant_id TEXT,
@@ -132,10 +155,15 @@ def init_db():
             total_value_after REAL,
             risk_score REAL
         )
-    """)
+        """
+    )
 
-    # Periodic behavioural snapshots
-    conn.execute("""
+    # --------------------------------------------------------
+    # SNAPSHOTS
+    # --------------------------------------------------------
+
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS snapshots (
             snapshot_id TEXT PRIMARY KEY,
             participant_id TEXT,
@@ -148,7 +176,8 @@ def init_db():
             high_risk_pct REAL,
             turnover REAL
         )
-    """)
+        """
+    )
 
     conn.commit()
     conn.close()
@@ -170,18 +199,28 @@ def assign_condition():
 
     conn.close()
 
-    gamified_count = counts.get("Gamified", 0)
-    standard_count = counts.get("Non-gamified", 0)
+    gamified_count = counts.get(
+        "Gamified",
+        0
+    )
 
-    # Keep the groups approximately balanced
-    if gamified_count < standard_count:
+    non_gamified_count = counts.get(
+        "Non-gamified",
+        0
+    )
+
+    # Keep groups approximately balanced
+    if gamified_count < non_gamified_count:
         return "Gamified"
 
-    if standard_count < gamified_count:
+    if non_gamified_count < gamified_count:
         return "Non-gamified"
 
     return random.SystemRandom().choice(
-        ["Gamified", "Non-gamified"]
+        [
+            "Gamified",
+            "Non-gamified"
+        ]
     )
 
 
@@ -193,8 +232,7 @@ def insert_participant():
 
     conn.execute(
         """
-        INSERT INTO participants
-        (
+        INSERT INTO participants (
             participant_id,
             condition,
             market_seed,
@@ -222,8 +260,7 @@ def log_trade(trade):
 
     conn.execute(
         """
-        INSERT INTO trades
-        (
+        INSERT INTO trades (
             trade_id,
             participant_id,
             timestamp,
@@ -253,8 +290,7 @@ def log_snapshot(snapshot):
 
     conn.execute(
         """
-        INSERT INTO snapshots
-        (
+        INSERT INTO snapshots (
             snapshot_id,
             participant_id,
             timestamp,
@@ -285,17 +321,23 @@ def finish_participant():
         """
         UPDATE participants
         SET
-            ended_at=?,
-            final_cash=?,
-            final_portfolio_value=?,
-            final_total_value=?
-        WHERE participant_id=?
+            ended_at = ?,
+            final_cash = ?,
+            final_portfolio_value = ?,
+            final_total_value = ?
+        WHERE participant_id = ?
         """,
         (
-            datetime.now(timezone.utc).isoformat(),
+            datetime.now(
+                timezone.utc
+            ).isoformat(),
+
             s.cash,
+
             portfolio_value(s),
+
             total_value(s),
+
             s.participant_id
         )
     )
@@ -316,58 +358,78 @@ def make_market(
 
     rng = np.random.default_rng(seed)
 
-    n = total_seconds // step + 1
+    number_of_points = (
+        total_seconds // step
+    ) + 1
 
     market = {}
 
-    for asset, spec in ASSETS.items():
+    for asset, specification in ASSETS.items():
 
-        prices = [spec["start"]]
+        prices = [
+            specification["start"]
+        ]
 
-        step_vol = (
-            spec["daily_vol"] * VOLATILITY_MULTIPLIER
+        step_volatility = (
+            specification["daily_vol"]
+            * VOLATILITY_MULTIPLIER
         ) / np.sqrt(78)
 
-        for _ in range(n - 1):
+        for _ in range(
+            number_of_points - 1
+        ):
 
-            ret = rng.normal(
+            return_value = rng.normal(
                 0,
-                step_vol
+                step_volatility
             )
 
-            next_price = prices[-1] * (1 + ret)
+            next_price = (
+                prices[-1]
+                * (1 + return_value)
+            )
 
             prices.append(
-                max(1.0, next_price)
+                max(
+                    1.0,
+                    next_price
+                )
             )
 
-        market[asset] = np.array(prices)
+        market[asset] = np.array(
+            prices
+        )
 
     return market
 
 
 def current_prices():
 
+    elapsed = (
+        time.monotonic()
+        - st.session_state.start_monotonic
+    )
+
     elapsed = min(
         TRADING_SECONDS,
-        max(
-            0,
-            time.monotonic()
-            - st.session_state.start_monotonic
+        max(0, elapsed)
+    )
+
+    first_asset_prices = next(
+        iter(
+            st.session_state.market.values()
         )
     )
 
-    first_market = next(
-        iter(st.session_state.market.values())
-    )
-
-    idx = min(
-        len(first_market) - 1,
+    index = min(
+        len(first_asset_prices) - 1,
         int(elapsed // TICK_SECONDS)
     )
 
     return {
-        asset: float(prices[idx])
+        asset: float(
+            prices[index]
+        )
         for asset, prices
         in st.session_state.market.items()
     }
@@ -382,8 +444,8 @@ def portfolio_value(s):
     prices = current_prices()
 
     return sum(
-        qty * prices[asset]
-        for asset, qty
+        quantity * prices[asset]
+        for asset, quantity
         in s.positions.items()
     )
 
@@ -409,30 +471,40 @@ def high_risk_value(s):
     prices = current_prices()
 
     return sum(
-        s.positions[asset] * prices[asset]
+        s.positions[asset]
+        * prices[asset]
+
         for asset in s.positions
-        if ASSETS[asset]["risk"] == "High"
+
+        if ASSETS[asset]["risk"]
+        == "High"
     )
 
 
 def invested_pct(s):
 
-    tv = total_value(s)
+    total = total_value(s)
 
-    if tv <= 0:
-        return 0
+    if total <= 0:
+        return 0.0
 
-    return portfolio_value(s) / tv
+    return (
+        portfolio_value(s)
+        / total
+    )
 
 
 def high_risk_pct(s):
 
-    pv = portfolio_value(s)
+    portfolio = portfolio_value(s)
 
-    if pv <= 0:
-        return 0
+    if portfolio <= 0:
+        return 0.0
 
-    return high_risk_value(s) / pv
+    return (
+        high_risk_value(s)
+        / portfolio
+    )
 
 
 # ============================================================
@@ -443,17 +515,21 @@ def initialise():
 
     if "page" not in st.session_state:
 
-        st.session_state.page = "instructions"
+        st.session_state.page = (
+            "instructions"
+        )
 
-        st.session_state.participant_id = str(
-            uuid.uuid4()
+        st.session_state.participant_id = (
+            str(uuid.uuid4())
         )
 
         st.session_state.condition = None
 
-        st.session_state.market_seed = random.randint(
-            1,
-            2_000_000_000
+        st.session_state.market_seed = (
+            random.randint(
+                1,
+                2_000_000_000
+            )
         )
 
         st.session_state.positions = {
@@ -466,12 +542,14 @@ def initialise():
             for asset in ASSETS
         }
 
-        st.session_state.cash = STARTING_CREDITS
+        st.session_state.cash = (
+            STARTING_CREDITS
+        )
 
         st.session_state.total_bought_value = 0.0
         st.session_state.total_sold_value = 0.0
 
-        # No artificial trade limit
+        # No trade limit
         st.session_state.trade_count = 0
 
         st.session_state.started_at = None
@@ -485,6 +563,12 @@ def initialise():
 
         st.session_state.exit_reason = None
 
+        st.session_state.celebration_until = 0
+
+        st.session_state.reward_message = None
+
+        st.session_state.reward_variant = None
+
 
 initialise()
 
@@ -492,342 +576,176 @@ init_db()
 
 
 # ============================================================
-# STYLING
+# GENERAL STYLING
 # ============================================================
 
 st.markdown(
     """
-<style>
+    <style>
 
-:root {
-    color-scheme: light !important;
-}
-
-html,
-body,
-[data-testid="stAppViewContainer"],
-[data-testid="stHeader"] {
-    background: #f6f7f9 !important;
-    color: #111111 !important;
-}
-
-[data-testid="stAppViewContainer"] *,
-[data-testid="stSidebar"] * {
-    color: #111111;
-}
-
-[data-testid="stWidgetLabel"] p,
-[data-testid="stMarkdownContainer"] p,
-[data-testid="stMarkdownContainer"] h1,
-[data-testid="stMarkdownContainer"] h2,
-[data-testid="stMarkdownContainer"] h3,
-[data-testid="stMarkdownContainer"] h4,
-[data-testid="stCaptionContainer"] {
-    color: #111111 !important;
-}
-
-input,
-textarea,
-[data-baseweb="select"] > div,
-[data-baseweb="base-input"] {
-    background: #ffffff !important;
-    color: #111111 !important;
-}
-
-[data-testid="stDataFrame"] {
-    background: #ffffff !important;
-}
-
-.hero {
-    padding: 18px 24px;
-    border-radius: 18px;
-    background: linear-gradient(
-        90deg,
-        #ff9bc5,
-        #b7a8ff
-    );
-    color: #111111;
-    margin-bottom: 18px;
-}
-
-.hero h1,
-.hero h2,
-.hero p,
-.badge {
-    color: #111111 !important;
-}
-
-.badge {
-    display: inline-block;
-    padding: 6px 12px;
-    border-radius: 999px;
-    background: #ffffffaa;
-    font-weight: 700;
-}
-
-.live-dot {
-    display: inline-block;
-    width: 10px;
-    height: 10px;
-    margin-right: 6px;
-    border-radius: 50%;
-    background: #111111;
-    animation: live-pulse 1s ease-in-out infinite;
-}
-
-.celebration-overlay {
-    position: fixed;
-    z-index: 9999;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    overflow: hidden;
-    background: rgba(61,179,92,.2);
-    animation: overlay-in .2s ease-out;
-}
-
-.celebration-content {
-    position: relative;
-    z-index: 2;
-    text-align: center;
-    animation: content-pop .3s ease-out;
-}
-
-.celebration-content h1 {
-    margin: 0 0 8px;
-    color: #075b2a !important;
-    font-size: clamp(2rem,6vw,4.2rem);
-    line-height: 1;
-}
-
-.celebration-content p {
-    margin: 0;
-    color: #075b2a !important;
-    font-size: clamp(1rem,2.5vw,1.35rem);
-    font-weight: 700;
-}
-
-.reward-effect {
-    height: 104px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: 8px;
-}
-
-.reward-star {
-    position: relative;
-    width: 82px;
-    height: 82px;
-    background: #ffd43b;
-    clip-path: polygon(
-        50% 0%,
-        61% 35%,
-        98% 35%,
-        68% 56%,
-        79% 92%,
-        50% 70%,
-        21% 92%,
-        32% 56%,
-        2% 35%,
-        39% 35%
-    );
-    filter: drop-shadow(
-        0 5px 10px rgba(145,94,0,.35)
-    );
-    animation: star-pop .55s ease-in-out infinite alternate;
-}
-
-.reward-star::after {
-    content: "";
-    position: absolute;
-    inset: 18px;
-    background: #fff3a3;
-    clip-path: inherit;
-}
-
-.reward-balloons {
-    gap: 22px;
-    align-items: flex-start;
-    padding-top: 8px;
-}
-
-.balloon {
-    position: relative;
-    width: 40px;
-    height: 52px;
-    border-radius: 50% 50% 46% 46%;
-    animation: balloon-bob .7s ease-in-out infinite alternate;
-}
-
-.balloon::before {
-    content: "";
-    position: absolute;
-    left: 15px;
-    bottom: -43px;
-    width: 1px;
-    height: 44px;
-    background: #075b2a;
-}
-
-.balloon::after {
-    content: "";
-    position: absolute;
-    left: 16px;
-    bottom: -3px;
-    width: 9px;
-    height: 9px;
-    background: inherit;
-    clip-path: polygon(
-        0 0,
-        100% 0,
-        50% 100%
-    );
-}
-
-.balloon:nth-child(1) {
-    background: #ff5f8f;
-}
-
-.balloon:nth-child(2) {
-    background: #ffd43b;
-    animation-delay: .15s;
-}
-
-.balloon:nth-child(3) {
-    background: #4dabf7;
-    animation-delay: .3s;
-}
-
-.confetti {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-}
-
-.confetti span {
-    position: absolute;
-    top: -12vh;
-    width: 12px;
-    height: 26px;
-    animation: confetti-fall 1.5s linear infinite;
-}
-
-.confetti span:nth-child(1) {
-    left: 8%;
-    background: #ff5fa2;
-    transform: rotate(18deg);
-}
-
-.confetti span:nth-child(2) {
-    left: 21%;
-    background: #7c5cff;
-    animation-delay: .35s;
-    transform: rotate(72deg);
-}
-
-.confetti span:nth-child(3) {
-    left: 35%;
-    background: #00a896;
-    animation-delay: .8s;
-    transform: rotate(42deg);
-}
-
-.confetti span:nth-child(4) {
-    left: 53%;
-    background: #ffb703;
-    animation-delay: .15s;
-    transform: rotate(88deg);
-}
-
-.confetti span:nth-child(5) {
-    left: 68%;
-    background: #fb5607;
-    animation-delay: .6s;
-    transform: rotate(28deg);
-}
-
-.confetti span:nth-child(6) {
-    left: 84%;
-    background: #3a86ff;
-    animation-delay: 1s;
-    transform: rotate(64deg);
-}
-
-@keyframes overlay-in {
-    from {
-        opacity: 0;
-    }
-    to {
-        opacity: 1;
-    }
-}
-
-@keyframes content-pop {
-    from {
-        transform: scale(.75);
-        opacity: 0;
-    }
-    to {
-        transform: scale(1);
-        opacity: 1;
-    }
-}
-
-@keyframes confetti-fall {
-    0% {
-        top: -12vh;
-        opacity: 1;
+    :root {
+        color-scheme: light !important;
     }
 
-    100% {
-        top: 112vh;
-        opacity: .2;
-        transform:
-            translateX(80px)
-            rotate(520deg);
-    }
-}
-
-@keyframes star-pop {
-    from {
-        transform:
-            scale(.8)
-            rotate(-8deg);
+    html,
+    body,
+    [data-testid="stAppViewContainer"],
+    [data-testid="stHeader"] {
+        background: #f6f7f9 !important;
+        color: #111111 !important;
     }
 
-    to {
-        transform:
-            scale(1.08)
-            rotate(8deg);
-    }
-}
-
-@keyframes balloon-bob {
-    from {
-        transform: translateY(4px);
+    [data-testid="stAppViewContainer"] *,
+    [data-testid="stSidebar"] * {
+        color: #111111;
     }
 
-    to {
-        transform: translateY(-8px);
+    [data-testid="stWidgetLabel"] p,
+    [data-testid="stMarkdownContainer"] p,
+    [data-testid="stMarkdownContainer"] h1,
+    [data-testid="stMarkdownContainer"] h2,
+    [data-testid="stMarkdownContainer"] h3,
+    [data-testid="stMarkdownContainer"] h4,
+    [data-testid="stCaptionContainer"] {
+        color: #111111 !important;
     }
-}
 
-@keyframes live-pulse {
-    0%, 100% {
-        transform: scale(1);
-        opacity: 1;
+    input,
+    textarea,
+    [data-baseweb="select"] > div,
+    [data-baseweb="base-input"] {
+        background: #ffffff !important;
+        color: #111111 !important;
     }
 
-    50% {
-        transform: scale(1.55);
-        opacity: .45;
+    [data-testid="stDataFrame"] {
+        background: #ffffff !important;
     }
-}
 
-</style>
-""",
+    .hero {
+        padding: 20px 25px;
+        border-radius: 18px;
+        background: linear-gradient(
+            90deg,
+            #ff9bc5,
+            #b7a8ff
+        );
+        margin-bottom: 20px;
+    }
+
+    .hero h1,
+    .hero h2,
+    .hero p {
+        color: #111111 !important;
+    }
+
+    .badge {
+        display: inline-block;
+        padding: 6px 12px;
+        border-radius: 999px;
+        background: #ffffffaa;
+        font-weight: 700;
+        margin-bottom: 8px;
+    }
+
+    .live-dot {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        margin-right: 6px;
+        border-radius: 50%;
+        background: #111111;
+        animation: livePulse 1s ease-in-out infinite;
+    }
+
+    .celebration-card {
+        padding: 24px;
+        margin: 10px 0 20px 0;
+        border-radius: 20px;
+        text-align: center;
+        background: linear-gradient(
+            135deg,
+            #ff9bc5,
+            #b7a8ff
+        );
+        box-shadow:
+            0 8px 25px
+            rgba(0,0,0,0.15);
+        animation: celebrationPop
+            0.45s ease-out;
+    }
+
+    .celebration-emoji {
+        font-size: 60px;
+        animation: celebrationBounce
+            0.65s ease-in-out
+            infinite alternate;
+    }
+
+    .celebration-title {
+        font-size: 32px;
+        font-weight: 800;
+        margin-top: 5px;
+        color: #111111 !important;
+    }
+
+    .celebration-subtitle {
+        font-size: 18px;
+        font-weight: 600;
+        color: #111111 !important;
+        margin-top: 5px;
+    }
+
+    @keyframes celebrationPop {
+
+        0% {
+            transform: scale(0.7);
+            opacity: 0;
+        }
+
+        70% {
+            transform: scale(1.05);
+            opacity: 1;
+        }
+
+        100% {
+            transform: scale(1);
+            opacity: 1;
+        }
+    }
+
+    @keyframes celebrationBounce {
+
+        0% {
+            transform:
+                translateY(0px)
+                rotate(-8deg)
+                scale(1);
+        }
+
+        100% {
+            transform:
+                translateY(-12px)
+                rotate(8deg)
+                scale(1.12);
+        }
+    }
+
+    @keyframes livePulse {
+
+        0%, 100% {
+            transform: scale(1);
+            opacity: 1;
+        }
+
+        50% {
+            transform: scale(1.5);
+            opacity: 0.45;
+        }
+    }
+
+    </style>
+    """,
     unsafe_allow_html=True
 )
 
@@ -842,8 +760,10 @@ if st.session_state.page == "instructions":
         """
         <div class="hero">
             <h1>📈 Trading Simulation</h1>
+
             <p>
-                Thank you for participating in this simulated trading study.
+                Thank you for participating in this
+                simulated trading study.
             </p>
         </div>
         """,
@@ -851,25 +771,34 @@ if st.session_state.page == "instructions":
     )
 
     st.info(
-        "The simulation uses artificial credits only. "
-        "They have no real monetary value."
+        "You will receive $10,000 in simulated credits. "
+        "These credits have no real monetary value."
     )
 
-    st.subheader("Before you begin")
+    st.subheader(
+        "Rules of the simulation"
+    )
 
     st.markdown(
         """
-        **Rules of the simulation:**
+        1. You will begin with **$10,000 in simulated credits**.
 
-        1. You will receive **$10,000 in simulated credits**.
-        2. You may buy and sell shares using these credits.
-        3. You may trade **as many times as you wish** during the simulation.
-        4. You can only buy shares when you have sufficient simulated credits.
+        2. You may buy and sell shares using your simulated credits.
+
+        3. You may make **as many trades as you wish** during the simulation.
+
+        4. You can only buy shares when you have enough simulated credits.
+
         5. You can only sell shares that you currently own.
+
         6. Share prices will change throughout the simulation.
-        7. The simulation will run for **8 minutes**.
+
+        7. The trading period will last for **8 minutes**.
+
         8. You may exit the simulation at any time.
+
         9. All credits and market movements are simulated and have no real monetary value.
+
         10. The simulation does not represent real financial markets or actual investment outcomes.
         """
     )
@@ -882,7 +811,8 @@ if st.session_state.page == "instructions":
     st.divider()
 
     understood = st.checkbox(
-        "I understand the instructions and agree to participate."
+        "I understand the instructions and agree to participate.",
+        key="understand_checkbox"
     )
 
     if st.button(
@@ -890,23 +820,45 @@ if st.session_state.page == "instructions":
         type="primary",
         use_container_width=True,
         disabled=not understood,
-        key="start_simulation_button"
+        key="start_trading_button"
     ):
 
-        # Assign condition only when the participant starts
-        st.session_state.condition = assign_condition()
+        # ----------------------------------------------------
+        # Assign experimental condition
+        # ----------------------------------------------------
+
+        st.session_state.condition = (
+            assign_condition()
+        )
+
+        # ----------------------------------------------------
+        # Start timer
+        # ----------------------------------------------------
 
         st.session_state.started_at = (
-            datetime.now(timezone.utc).isoformat()
+            datetime.now(
+                timezone.utc
+            ).isoformat()
         )
 
-        st.session_state.start_monotonic = time.monotonic()
-
-        st.session_state.market = make_market(
-            st.session_state.market_seed
+        st.session_state.start_monotonic = (
+            time.monotonic()
         )
 
-        # Reset trading state in case of accidental reruns
+        # ----------------------------------------------------
+        # Generate private market path
+        # ----------------------------------------------------
+
+        st.session_state.market = (
+            make_market(
+                st.session_state.market_seed
+            )
+        )
+
+        # ----------------------------------------------------
+        # Reset trading state
+        # ----------------------------------------------------
+
         st.session_state.positions = {
             asset: 0
             for asset in ASSETS
@@ -917,14 +869,32 @@ if st.session_state.page == "instructions":
             for asset in ASSETS
         }
 
-        st.session_state.cash = STARTING_CREDITS
+        st.session_state.cash = (
+            STARTING_CREDITS
+        )
+
         st.session_state.total_bought_value = 0.0
         st.session_state.total_sold_value = 0.0
+
         st.session_state.trade_count = 0
+
         st.session_state.performance_history = []
+
         st.session_state.last_snapshot_bucket = -1
 
+        st.session_state.finished = False
+
+        st.session_state.exit_reason = None
+
+        # ----------------------------------------------------
+        # Save participant
+        # ----------------------------------------------------
+
         insert_participant()
+
+        # ----------------------------------------------------
+        # Move to trading page
+        # ----------------------------------------------------
 
         st.session_state.page = "trading"
 
@@ -937,6 +907,10 @@ if st.session_state.page == "instructions":
 
 elif st.session_state.page == "trading":
 
+    # --------------------------------------------------------
+    # Calculate elapsed time
+    # --------------------------------------------------------
+
     elapsed = (
         time.monotonic()
         - st.session_state.start_monotonic
@@ -947,116 +921,127 @@ elif st.session_state.page == "trading":
         TRADING_SECONDS - elapsed
     )
 
+
     # --------------------------------------------------------
-    # AUTOMATIC END AFTER 8 MINUTES
+    # End automatically after 8 minutes
     # --------------------------------------------------------
 
     if remaining <= 0:
 
-        st.session_state.exit_reason = "Time completed"
-        st.session_state.page = "results"
+        st.session_state.exit_reason = (
+            "Time completed"
+        )
+
+        st.session_state.page = (
+            "thank_you"
+        )
 
         finish_participant()
 
         st.rerun()
 
 
+    # --------------------------------------------------------
+    # Current prices
+    # --------------------------------------------------------
+
     prices = current_prices()
 
 
-    # --------------------------------------------------------
+    # ========================================================
     # GAMIFIED CELEBRATION
-    # --------------------------------------------------------
+    # ========================================================
 
     if (
-        st.session_state.get("celebration_until", 0)
+        st.session_state.get(
+            "celebration_until",
+            0
+        )
         > time.monotonic()
     ):
 
-        reward_variant = st.session_state.get(
-            "reward_variant",
-            "star"
+        reward_message = (
+            st.session_state.get(
+                "reward_message",
+                "Great trade!"
+            )
         )
 
-        reward_content = {
-            "balloons":
-                """
-                <div class="reward-effect reward-balloons">
-                    <span class="balloon"></span>
-                    <span class="balloon"></span>
-                    <span class="balloon"></span>
-                </div>
-                """,
-
-            "star":
-                """
-                <div class="reward-effect">
-                    <div class="reward-star"></div>
-                </div>
-                """,
-
-            "confetti":
-                """
-                <div class="reward-effect">
-                    <div class="confetti">
-                        <span></span>
-                        <span></span>
-                        <span></span>
-                        <span></span>
-                        <span></span>
-                        <span></span>
-                    </div>
-                </div>
-                """
-        }[reward_variant]
-
-        reward_message = st.session_state.get(
-            "reward_message",
-            "Trade recorded!"
+        reward_variant = (
+            st.session_state.get(
+                "reward_variant",
+                "balloons"
+            )
         )
 
+        # Native Streamlit animations
+        if reward_variant == "balloons":
+
+            st.balloons()
+
+        elif reward_variant == "snow":
+
+            st.snow()
+
+
+        # Animated celebration card
         st.markdown(
             f"""
-            <div class="celebration-overlay">
-                <div class="celebration-content">
-                    {reward_content}
-                    <h1>{reward_message}</h1>
-                    <p>Trade recorded.</p>
+            <div class="celebration-card">
+
+                <div class="celebration-emoji">
+                    🎉
                 </div>
+
+                <div class="celebration-title">
+                    {reward_message}
+                </div>
+
+                <div class="celebration-subtitle">
+                    Trade successfully recorded!
+                </div>
+
             </div>
             """,
             unsafe_allow_html=True
         )
 
 
-    # --------------------------------------------------------
+    # ========================================================
     # PERFORMANCE HISTORY
-    # --------------------------------------------------------
+    # ========================================================
 
-    current_total_value = total_value(
-        st.session_state
+    current_total_value = (
+        total_value(
+            st.session_state
+        )
     )
 
     st.session_state.performance_history.append(
         {
             "Elapsed minutes":
-                round(elapsed / 60, 2),
+                round(
+                    elapsed / 60,
+                    2
+                ),
 
             "Total value":
                 current_total_value,
 
             "Portfolio value":
-                portfolio_value(st.session_state),
+                portfolio_value(
+                    st.session_state
+                ),
 
             "Available credits":
-                st.session_state.cash,
+                st.session_state.cash
         }
     )
 
 
-    # --------------------------------------------------------
+    # ========================================================
     # PERIODIC SNAPSHOT
-    # --------------------------------------------------------
+    # ========================================================
 
     current_bucket = int(
         elapsed // TICK_SECONDS
@@ -1071,8 +1056,10 @@ elif st.session_state.page == "trading":
             current_bucket
         )
 
-        tv = total_value(
-            st.session_state
+        snapshot_total_value = (
+            total_value(
+                st.session_state
+            )
         )
 
         log_snapshot(
@@ -1089,7 +1076,10 @@ elif st.session_state.page == "trading":
                     ).isoformat(),
 
                 "elapsed_seconds":
-                    round(elapsed, 2),
+                    round(
+                        elapsed,
+                        2
+                    ),
 
                 "cash":
                     st.session_state.cash,
@@ -1100,7 +1090,7 @@ elif st.session_state.page == "trading":
                     ),
 
                 "total_value":
-                    tv,
+                    snapshot_total_value,
 
                 "invested_pct":
                     invested_pct(
@@ -1120,11 +1110,11 @@ elif st.session_state.page == "trading":
         )
 
 
-    # --------------------------------------------------------
+    # ========================================================
     # HEADER
-    # --------------------------------------------------------
+    # ========================================================
 
-    mins, secs = divmod(
+    minutes, seconds = divmod(
         int(remaining),
         60
     )
@@ -1132,32 +1122,36 @@ elif st.session_state.page == "trading":
     st.markdown(
         f"""
         <div class="hero">
+
             <span class="badge">
                 <span class="live-dot"></span>
                 LIVE MARKET
             </span>
 
-            <h1>Trading Simulation</h1>
+            <h1>
+                Trading Simulation
+            </h1>
 
             <h2>
                 Time remaining:
-                {mins:02d}:{secs:02d}
+                {minutes:02d}:{seconds:02d}
             </h2>
+
         </div>
         """,
         unsafe_allow_html=True
     )
 
 
-    # --------------------------------------------------------
+    # ========================================================
     # EXIT BUTTON
-    # --------------------------------------------------------
+    # ========================================================
 
-    exit_col1, exit_col2 = st.columns(
+    exit_left, exit_right = st.columns(
         [5, 1]
     )
 
-    with exit_col2:
+    with exit_right:
 
         if st.button(
             "Exit simulation",
@@ -1170,35 +1164,39 @@ elif st.session_state.page == "trading":
                 "Participant exited early"
             )
 
-            st.session_state.page = "results"
+            st.session_state.page = (
+                "thank_you"
+            )
 
             finish_participant()
 
             st.rerun()
 
 
-    # --------------------------------------------------------
+    # ========================================================
     # SUMMARY METRICS
-    # --------------------------------------------------------
+    # ========================================================
 
-    c1, c2, c3, c4 = st.columns(4)
+    metric1, metric2, metric3, metric4 = (
+        st.columns(4)
+    )
 
-    c1.metric(
+    metric1.metric(
         "Available credits",
         f"${st.session_state.cash:,.0f}"
     )
 
-    c2.metric(
+    metric2.metric(
         "Portfolio value",
         f"${portfolio_value(st.session_state):,.0f}"
     )
 
-    c3.metric(
+    metric3.metric(
         "Total value",
         f"${total_value(st.session_state):,.0f}"
     )
 
-    c4.metric(
+    metric4.metric(
         "Trades",
         st.session_state.trade_count
     )
@@ -1214,7 +1212,9 @@ elif st.session_state.page == "trading":
     # PERFORMANCE CHART
     # ========================================================
 
-    st.subheader("Investment performance")
+    st.subheader(
+        "Investment performance"
+    )
 
     performance = (
         pd.DataFrame(
@@ -1224,7 +1224,9 @@ elif st.session_state.page == "trading":
             subset=["Elapsed minutes"],
             keep="last"
         )
-        .set_index("Elapsed minutes")
+        .set_index(
+            "Elapsed minutes"
+        )
     )
 
     if not performance.empty:
@@ -1244,11 +1246,15 @@ elif st.session_state.page == "trading":
     # SHARE PRICE HISTORY
     # ========================================================
 
-    st.subheader("Share price history")
+    st.subheader(
+        "Share price history"
+    )
 
     history_choice = st.selectbox(
         "Choose a share to inspect",
-        ["All shares"] + list(ASSETS.keys()),
+        [
+            "All shares"
+        ] + list(ASSETS.keys()),
         key="history_choice"
     )
 
@@ -1271,9 +1277,16 @@ elif st.session_state.page == "trading":
         history = pd.DataFrame(
             {
                 asset:
-                    st.session_state.market[asset]
-                    / st.session_state.market[asset][0]
-                    * 100
+                    (
+                        st.session_state.market[
+                            asset
+                        ]
+                        /
+                        st.session_state.market[
+                            asset
+                        ][0]
+                        * 100
+                    )
 
                 for asset in ASSETS
             },
@@ -1283,8 +1296,9 @@ elif st.session_state.page == "trading":
         history.index.name = "Minutes"
 
         st.caption(
-            "All shares are indexed to 100 at the start "
-            "so their performance can be compared fairly."
+            "All shares are indexed to 100 at "
+            "the start so their performance "
+            "can be compared fairly."
         )
 
     else:
@@ -1301,6 +1315,7 @@ elif st.session_state.page == "trading":
 
         history.index.name = "Minutes"
 
+
     st.line_chart(
         history,
         use_container_width=True
@@ -1313,12 +1328,14 @@ elif st.session_state.page == "trading":
 
     rows = []
 
-    for asset, spec in ASSETS.items():
+    for asset, specification in ASSETS.items():
 
         current_price = prices[asset]
 
         starting_price = (
-            st.session_state.market[asset][0]
+            st.session_state.market[
+                asset
+            ][0]
         )
 
         price_change = (
@@ -1328,26 +1345,46 @@ elif st.session_state.page == "trading":
 
         rows.append(
             {
-                "Asset": asset,
-                "Risk": spec["risk"],
-                "Current price": current_price,
-                "Change": price_change,
+                "Asset":
+                    asset,
+
+                "Risk":
+                    specification["risk"],
+
+                "Current price":
+                    current_price,
+
+                "Change":
+                    price_change,
+
                 "Change %":
-                    price_change
-                    / starting_price
-                    * 100,
+                    (
+                        price_change
+                        / starting_price
+                        * 100
+                    ),
+
                 "Units held":
-                    st.session_state.positions[asset],
+                    st.session_state.positions[
+                        asset
+                    ],
+
                 "Position value":
-                    st.session_state.positions[asset]
-                    * current_price
+                    (
+                        st.session_state.positions[
+                            asset
+                        ]
+                        * current_price
+                    )
             }
         )
 
-    asset_df = pd.DataFrame(rows)
+    asset_table = pd.DataFrame(
+        rows
+    )
 
     st.dataframe(
-        asset_df.style.format(
+        asset_table.style.format(
             {
                 "Current price":
                     "${:,.2f}",
@@ -1371,7 +1408,7 @@ elif st.session_state.page == "trading":
 
 
     # ========================================================
-    # SINGLE TRADING INTERFACE
+    # SINGLE TRADING BOX
     # ========================================================
 
     left, right = st.columns(
@@ -1379,185 +1416,251 @@ elif st.session_state.page == "trading":
     )
 
 
-    # --------------------------------------------------------
-    # TRADE CONTROLS
-    # --------------------------------------------------------
+    # ========================================================
+    # TRADE FORM
+    # ========================================================
 
     with left:
 
-        st.subheader("Place a trade")
-
-        asset = st.selectbox(
-            "Asset",
-            list(ASSETS.keys()),
-            key="trade_asset"
+        st.subheader(
+            "Place a trade"
         )
 
-        action = st.radio(
-            "Action",
-            ["Buy", "Sell"],
-            horizontal=True,
-            key="trade_action"
-        )
+        # IMPORTANT:
+        # There is ONE form and ONE quantity input.
+        # This prevents the duplicated trading controls.
 
-        price = prices[asset]
-
-        max_buy = int(
-            st.session_state.cash
-            // price
-        )
-
-        max_sell = (
-            st.session_state.positions[asset]
-        )
-
-
-        # ----------------------------------------------------
-        # QUANTITY
-        # ----------------------------------------------------
-
-        if action == "Buy":
-
-            available_quantity = max_buy
-
-            st.caption(
-                f"Maximum affordable: "
-                f"{available_quantity:,} units"
-            )
-
-        else:
-
-            available_quantity = max_sell
-
-            st.caption(
-                f"Units available to sell: "
-                f"{available_quantity:,}"
-            )
-
-
-        # FIX:
-        # Do not force max_qty to 1 when zero is available.
-        # This was one source of the confusing trade behaviour.
-
-        if available_quantity > 0:
-
-            quantity = st.number_input(
-                "Quantity",
-                min_value=1,
-                max_value=available_quantity,
-                value=1,
-                step=1,
-                key="trade_quantity"
-            )
-
-            trade_disabled = False
-
-        else:
-
-            quantity = 0
-
-            trade_disabled = True
-
-            if action == "Buy":
-
-                st.warning(
-                    "You do not have enough credits "
-                    "to buy this asset."
-                )
-
-            else:
-
-                st.warning(
-                    "You do not currently own "
-                    "this asset."
-                )
-
-
-        # ----------------------------------------------------
-        # EXECUTE TRADE
-        # ----------------------------------------------------
-
-        if st.button(
-            "Execute trade",
-            type="primary",
-            use_container_width=True,
-            disabled=trade_disabled,
-            key="execute_trade_button"
+        with st.form(
+            "single_trade_form",
+            clear_on_submit=False
         ):
 
-            qty = int(quantity)
+            trade_asset = st.selectbox(
+                "Asset",
+                list(ASSETS.keys()),
+                key="trade_asset"
+            )
 
-            # Re-read current price and balances
-            # immediately before executing.
-            prices_now = current_prices()
+            trade_action = st.radio(
+                "Action",
+                [
+                    "Buy",
+                    "Sell"
+                ],
+                horizontal=True,
+                key="trade_action"
+            )
 
-            price_now = prices_now[asset]
+            trade_price = prices[
+                trade_asset
+            ]
 
-            if action == "Buy":
 
-                max_buy_now = int(
+            # ------------------------------------------------
+            # BUY
+            # ------------------------------------------------
+
+            if trade_action == "Buy":
+
+                maximum_quantity = int(
                     st.session_state.cash
-                    // price_now
+                    // trade_price
                 )
 
-                if qty < 1 or qty > max_buy_now:
+                if maximum_quantity > 0:
 
-                    st.error(
-                        "You do not have enough "
-                        "credits for that trade."
+                    st.caption(
+                        f"Maximum affordable: "
+                        f"{maximum_quantity:,} units"
                     )
 
-                    st.stop()
+                else:
 
-                value = (
-                    qty
-                    * price_now
-                )
+                    st.caption(
+                        "You do not currently "
+                        "have enough credits "
+                        "to buy this asset."
+                    )
 
-                st.session_state.cash -= value
 
-                st.session_state.positions[
-                    asset
-                ] += qty
-
-                st.session_state.position_cost_basis[
-                    asset
-                ] += value
-
-                st.session_state.total_bought_value += value
-
+            # ------------------------------------------------
+            # SELL
+            # ------------------------------------------------
 
             else:
 
-                max_sell_now = (
+                maximum_quantity = int(
                     st.session_state.positions[
-                        asset
+                        trade_asset
                     ]
                 )
 
-                if qty < 1 or qty > max_sell_now:
+                if maximum_quantity > 0:
 
-                    st.error(
-                        "You do not own enough "
-                        "units for that trade."
+                    st.caption(
+                        f"Units available to sell: "
+                        f"{maximum_quantity:,}"
                     )
 
-                    st.stop()
+                else:
 
-                value = (
-                    qty
-                    * price_now
+                    st.caption(
+                        "You do not currently "
+                        "own this asset."
+                    )
+
+
+            # ------------------------------------------------
+            # QUANTITY
+            # ------------------------------------------------
+
+            if maximum_quantity > 0:
+
+                trade_quantity = st.number_input(
+                    "Number of units",
+                    min_value=1,
+                    max_value=maximum_quantity,
+                    value=1,
+                    step=1,
+                    key="trade_quantity"
+                )
+
+                trade_available = True
+
+            else:
+
+                trade_quantity = 0
+
+                trade_available = False
+
+
+            # ------------------------------------------------
+            # EXECUTE
+            # ------------------------------------------------
+
+            execute_trade = st.form_submit_button(
+                "Execute trade",
+                type="primary",
+                use_container_width=True,
+                disabled=not trade_available
+            )
+
+
+    # ========================================================
+    # PROCESS TRADE
+    # ========================================================
+
+    if execute_trade and trade_available:
+
+        # Recalculate the price at execution
+        execution_prices = current_prices()
+
+        execution_price = (
+            execution_prices[
+                trade_asset
+            ]
+        )
+
+        quantity = int(
+            trade_quantity
+        )
+
+        trade_completed = False
+
+
+        # ----------------------------------------------------
+        # BUY VALIDATION
+        # ----------------------------------------------------
+
+        if trade_action == "Buy":
+
+            maximum_affordable = int(
+                st.session_state.cash
+                // execution_price
+            )
+
+            if quantity < 1:
+
+                st.error(
+                    "Please select a valid "
+                    "quantity."
+                )
+
+            elif quantity > maximum_affordable:
+
+                st.error(
+                    "You do not have enough "
+                    "credits for that trade."
+                )
+
+            else:
+
+                trade_value = (
+                    quantity
+                    * execution_price
+                )
+
+                st.session_state.cash -= (
+                    trade_value
+                )
+
+                st.session_state.positions[
+                    trade_asset
+                ] += quantity
+
+                st.session_state.position_cost_basis[
+                    trade_asset
+                ] += trade_value
+
+                st.session_state.total_bought_value += (
+                    trade_value
+                )
+
+                trade_completed = True
+
+
+        # ----------------------------------------------------
+        # SELL VALIDATION
+        # ----------------------------------------------------
+
+        elif trade_action == "Sell":
+
+            units_owned = (
+                st.session_state.positions[
+                    trade_asset
+                ]
+            )
+
+            if quantity < 1:
+
+                st.error(
+                    "Please select a valid "
+                    "quantity."
+                )
+
+            elif quantity > units_owned:
+
+                st.error(
+                    "You do not own enough "
+                    "units for that trade."
+                )
+
+            else:
+
+                trade_value = (
+                    quantity
+                    * execution_price
                 )
 
                 current_units = (
                     st.session_state.positions[
-                        asset
+                        trade_asset
                     ]
                 )
 
                 current_cost_basis = (
                     st.session_state.position_cost_basis[
-                        asset
+                        trade_asset
                     ]
                 )
 
@@ -1568,41 +1671,57 @@ elif st.session_state.page == "trading":
                     else 0.0
                 )
 
-                st.session_state.cash += value
+                st.session_state.cash += (
+                    trade_value
+                )
 
                 st.session_state.positions[
-                    asset
-                ] -= qty
+                    trade_asset
+                ] -= quantity
 
                 st.session_state.position_cost_basis[
-                    asset
+                    trade_asset
                 ] = max(
                     0.0,
                     current_cost_basis
-                    - average_cost * qty
+                    - (
+                        average_cost
+                        * quantity
+                    )
                 )
 
-                st.session_state.total_sold_value += value
+                st.session_state.total_sold_value += (
+                    trade_value
+                )
+
+                trade_completed = True
 
 
-            # ------------------------------------------------
-            # RECORD TRADE
-            # ------------------------------------------------
+        # ====================================================
+        # SAVE SUCCESSFUL TRADE
+        # ====================================================
+
+        if trade_completed:
 
             st.session_state.trade_count += 1
 
-            now_elapsed = (
+            trade_elapsed = (
                 time.monotonic()
                 - st.session_state.start_monotonic
             )
 
-            pv = portfolio_value(
-                st.session_state
+            new_portfolio_value = (
+                portfolio_value(
+                    st.session_state
+                )
             )
 
-            tv = total_value(
-                st.session_state
+            new_total_value = (
+                total_value(
+                    st.session_state
+                )
             )
+
 
             log_trade(
                 {
@@ -1619,45 +1738,47 @@ elif st.session_state.page == "trading":
 
                     "elapsed_seconds":
                         round(
-                            now_elapsed,
+                            trade_elapsed,
                             2
                         ),
 
                     "action":
-                        action,
+                        trade_action,
 
                     "asset":
-                        asset,
+                        trade_asset,
 
                     "quantity":
-                        qty,
+                        quantity,
 
                     "price":
-                        price_now,
+                        execution_price,
 
                     "trade_value":
-                        value,
+                        trade_value,
 
                     "cash_after":
                         st.session_state.cash,
 
                     "portfolio_value_after":
-                        pv,
+                        new_portfolio_value,
 
                     "total_value_after":
-                        tv,
+                        new_total_value,
 
                     "risk_score":
                         RISK_SCORE[
-                            ASSETS[asset]["risk"]
+                            ASSETS[
+                                trade_asset
+                            ]["risk"]
                         ]
                 }
             )
 
 
-            # ------------------------------------------------
-            # GAMIFICATION
-            # ------------------------------------------------
+            # =================================================
+            # GAMIFIED CONDITION
+            # =================================================
 
             if (
                 st.session_state.condition
@@ -1668,92 +1789,71 @@ elif st.session_state.page == "trading":
                     random.choice(
                         [
                             "balloons",
-                            "star",
-                            "confetti"
+                            "snow"
                         ]
                     )
                 )
 
-                reward_messages = {
-
-                    "balloons":
-                        [
-                            "Great choice!",
-                            "Keep it moving!",
-                            "Up you go!",
-                            "Nice lift!"
-                        ],
-
-                    "star":
-                        [
-                            "Brilliant move!",
-                            "Sharp thinking!",
-                            "You saw it!",
-                            "Excellent call!"
-                        ],
-
-                    "confetti":
-                        [
-                            "Nice work!",
-                            "Trade success!",
-                            "Well played!",
-                            "Good momentum!"
-                        ]
-                }
+                reward_messages = [
+                    "Great choice!",
+                    "Brilliant move!",
+                    "Excellent call!",
+                    "Nice work!",
+                    "Trade success!",
+                    "Keep it moving!",
+                    "Well played!",
+                    "Good momentum!"
+                ]
 
                 st.session_state.reward_message = (
                     random.choice(
-                        reward_messages[
-                            st.session_state.reward_variant
-                        ]
+                        reward_messages
                     )
                 )
 
-                if (
-                    st.session_state.reward_variant
-                    == "balloons"
-                ):
-
-                    st.balloons()
-
                 st.session_state.celebration_until = (
-                    time.monotonic() + 2
+                    time.monotonic()
+                    + 3
                 )
 
             else:
 
-                st.success(
-                    "Trade executed."
-                )
+                st.session_state.reward_message = None
+
+                st.session_state.celebration_until = 0
 
 
-            # Rerun once after the trade so that
-            # balances, charts and tables update.
+            # ------------------------------------------------
+            # ONE AND ONLY ONE RERUN
+            # ------------------------------------------------
+
             st.rerun()
 
 
     # ========================================================
-    # PORTFOLIO
+    # PORTFOLIO DISPLAY
     # ========================================================
 
     with right:
 
-        st.subheader("Your portfolio")
+        st.subheader(
+            "Your portfolio"
+        )
 
         portfolio_rows = []
 
         for asset in ASSETS:
 
-            qty = (
+            quantity = (
                 st.session_state.positions[
                     asset
                 ]
             )
 
-            if qty > 0:
+            if quantity > 0:
 
                 current_value = (
-                    qty
+                    quantity
                     * prices[asset]
                 )
 
@@ -1763,14 +1863,14 @@ elif st.session_state.page == "trading":
                     ]
                 )
 
-                return_pct = (
+                return_percentage = (
                     (
                         current_value
                         - cost_basis
                     )
                     / cost_basis
                     * 100
-                    if cost_basis
+                    if cost_basis > 0
                     else 0.0
                 )
 
@@ -1783,23 +1883,25 @@ elif st.session_state.page == "trading":
                             ASSETS[asset]["risk"],
 
                         "Units":
-                            qty,
+                            quantity,
 
                         "Current value":
                             current_value,
 
                         "Return %":
-                            return_pct
+                            return_percentage
                     }
                 )
 
 
         if portfolio_rows:
 
+            portfolio_table = pd.DataFrame(
+                portfolio_rows
+            )
+
             st.dataframe(
-                pd.DataFrame(
-                    portfolio_rows
-                ).style.format(
+                portfolio_table.style.format(
                     {
                         "Current value":
                             "${:,.2f}",
@@ -1819,23 +1921,29 @@ elif st.session_state.page == "trading":
             )
 
 
+        # ====================================================
+        # BEHAVIOUR INDICATORS
+        # ====================================================
+
         st.subheader(
             "Behaviour indicators"
         )
 
-        b1, b2, b3 = st.columns(3)
+        behaviour1, behaviour2, behaviour3 = (
+            st.columns(3)
+        )
 
-        b1.metric(
+        behaviour1.metric(
             "Invested",
             f"{invested_pct(st.session_state) * 100:.1f}%"
         )
 
-        b2.metric(
+        behaviour2.metric(
             "High-risk exposure",
             f"{high_risk_pct(st.session_state) * 100:.1f}%"
         )
 
-        b3.metric(
+        behaviour3.metric(
             "Turnover",
             f"${turnover(st.session_state):,.0f}"
         )
@@ -1854,15 +1962,20 @@ elif st.session_state.page == "trading":
 # PAGE 3: THANK YOU
 # ============================================================
 
-elif st.session_state.page == "results":
+elif st.session_state.page == "thank_you":
 
     st.markdown(
         """
         <div class="hero">
-            <h1>Thank you for participating!</h1>
+
+            <h1>
+                Thank you for participating! 🎉
+            </h1>
+
             <p>
                 Your participation has been recorded.
             </p>
+
         </div>
         """,
         unsafe_allow_html=True
